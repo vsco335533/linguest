@@ -1,0 +1,6 @@
+username,email,password,english_level,age,native_language,grade,board,school
+student,student@example.com,Pass@123,A1,10,English,5,CBSE,Sanghmitra
+student1,student1@example.com,Pass@123,A1,11,Telugu,5,CBSE,Chaianya
+student2,student2@example.com,Pass@123,A1,10,English,5,CBSE,Delhi Public School
+student3,student3@example.com,Pass@123,A1,10,Telugu,5,CBSE,Sanghmitra
+student4,student4@example.com,Pass@123,A1,10,English,5,CBSE,Chaianya

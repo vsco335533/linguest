@@ -1,0 +1,144 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: linguist
+      POSTGRES_USER: linguist
+      POSTGRES_PASSWORD: linguist
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./linguist-backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U linguist -d linguist"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── pgAdmin – PostgreSQL GUI ────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Ollama – local LLM runtime ─────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # Remove the deploy block if you don't have an NVIDIA GPU available.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 30s
+
+  # ── Ollama model bootstrap (runs once, then exits) ─────────────────────────
+  # Pulls the two models the app needs: llama3.1 (chat) and mistral (quiz).
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: >
+      /bin/sh -c "
+        ollama pull llama3.1 &&
+        ollama pull mistral
+      "
+
+  # ── Flask backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./linguist-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      # Contains: ENV, JWT_SECRET_KEY, JWT_ACCESS_TOKEN_EXPIRES_MINUTES,
+      #           JWT_REFRESH_TOKEN_EXPIRES
+      - ./linguist-backend/app/.env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=linguist
+      - POSTGRES_USER=linguist
+      - POSTGRES_PASSWORD=linguist
+    volumes:
+      # Persist SQLite database across container restarts
+      - ./linguist-backend/linguis.db:/app/linguis.db
+      # Persist LanceDB vector cache
+      - ./linguist-backend/quiz_cache:/app/quiz_cache
+      # Persist structured log files
+      - ./linguist-backend/app/logs:/app/app/logs
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # Remove the deploy block if you don't have an NVIDIA GPU available.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/api/v1/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── React / Vite frontend (nginx) ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./linguist-frontent
+      dockerfile: Dockerfile
+      args:
+        # The nginx reverse-proxy rewrites /api/v1/* → backend:8000/api/v1/*
+        # so the browser only ever talks to the frontend container on port 80.
+        VITE_LINGUIST_BACKEND_URL: /api/v1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  ollama_models:
+    # Stores downloaded LLM model weights outside the container lifecycle.
+  postgres_data:
+    # Persists PostgreSQL data across container restarts.
+  pgadmin_data:
+    # Persists pgAdmin settings and server connections.
