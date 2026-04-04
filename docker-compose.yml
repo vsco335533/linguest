@@ -70,7 +70,7 @@ services:
     entrypoint: >
       /bin/sh -c "
         ollama pull llama3.1 &&
-        ollama pull mistral
+        ollama pull phi3:mini
       "
 
   # ── Flask backend ──────────────────────────────────────────────────────────
@@ -87,16 +87,19 @@ services:
       - ./linguist-backend/app/.env
     environment:
       - OLLAMA_HOST=http://ollama:11434
+      - QUIZ_LLM_MODEL=phi3:mini
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DB=linguist
       - POSTGRES_USER=linguist
       - POSTGRES_PASSWORD=linguist
+      - HF_TOKEN=${HF_TOKEN:-}
+      - DD_TRACE_ENABLED=false
     volumes:
       # Persist SQLite database across container restarts
       - ./linguist-backend/linguis.db:/app/linguis.db
-      # Persist LanceDB vector cache
-      - ./linguist-backend/quiz_cache:/app/quiz_cache
+      # Persist LanceDB vector cache (named volume avoids Windows path issues)
+      - quiz_cache:/app/quiz_cache
       # Persist structured log files
       - ./linguist-backend/app/logs:/app/app/logs
     depends_on:
@@ -142,3 +145,5 @@ volumes:
     # Persists PostgreSQL data across container restarts.
   pgadmin_data:
     # Persists pgAdmin settings and server connections.
+  quiz_cache:
+    # LanceDB vector cache for quiz session deduplication.
