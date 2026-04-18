@@ -1,0 +1,91 @@
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-linguist}
+      POSTGRES_USER: ${POSTGRES_USER:-linguist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5432:5432"   # bind to loopback only — not exposed publicly
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./linguist-backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-linguist} -d ${POSTGRES_DB:-linguist}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── pgAdmin – PostgreSQL GUI ────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD is required}
+    ports:
+      - "127.0.0.1:5050:80"     # bind to loopback — access via SSH tunnel
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Flask backend ──────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./linguist-backend
+      dockerfile: Dockerfile.hetzner
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"   # nginx (host) will proxy to this
+    env_file:
+      - ./linguist-backend/app/.env
+    environment:
+      # Point to RunPod Ollama endpoint — set in .env.hetzner
+      - OLLAMA_HOST=${OLLAMA_HOST:?OLLAMA_HOST (RunPod URL) is required}
+      - QUIZ_LLM_MODEL=${QUIZ_LLM_MODEL:-phi3:mini}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-linguist}
+      - POSTGRES_USER=${POSTGRES_USER:-linguist}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - DD_TRACE_ENABLED=false
+    volumes:
+      - ./linguist-backend/linguis.db:/app/linguis.db
+      - quiz_cache:/app/quiz_cache
+      - ./linguist-backend/app/logs:/app/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8000/api/v1/auth/login > /dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # ── React / Vite frontend (nginx) ──────────────────────────────────────────
+  frontend:
+    build:
+      context: ./linguist-frontent
+      dockerfile: Dockerfile
+      args:
+        # Nginx reverse-proxy rewrites /api/v1/* → backend:8000, so keep this as /api/v1
+        VITE_LINGUIST_BACKEND_URL: /api/v1
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  quiz_cache:
