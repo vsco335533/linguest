@@ -11,7 +11,14 @@ node_modules
 dist
 dist-ssr
 *.local
-
+.zip
+*.7z
+*.tar.gz
+*.tgz
+*.bak
+*.tmp
+*.swp
+*.swo
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
