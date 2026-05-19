@@ -87,6 +87,7 @@ services:
       - ./linguist-backend/app/.env
     environment:
       - OLLAMA_HOST=http://ollama:11434
+      - TTS_HOST=${TTS_HOST:-}
       - QUIZ_LLM_MODEL=phi3:mini
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432

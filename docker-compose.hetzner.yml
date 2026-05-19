@@ -47,6 +47,7 @@ services:
     environment:
       # Point to RunPod Ollama endpoint — set in .env.hetzner
       - OLLAMA_HOST=${OLLAMA_HOST:?OLLAMA_HOST (RunPod URL) is required}
+      - TTS_HOST=${TTS_HOST:-}
       - QUIZ_LLM_MODEL=${QUIZ_LLM_MODEL:-phi3:mini}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
       - POSTGRES_HOST=postgres
