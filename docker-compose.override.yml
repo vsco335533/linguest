@@ -1,0 +1,23 @@
+# docker-compose.override.yml — DEV ONLY
+# Docker Compose automatically merges this with docker-compose.yml.
+# Adds hot-reload and source mounts so code changes apply without rebuilding.
+#
+# Usage:  docker compose up -d          (starts everything with dev overrides)
+#         docker compose restart backend (restart backend after heavy changes)
+
+services:
+
+  backend:
+    # Mount source code so changes are reflected immediately.
+    # Installed packages stay inside the container image (no re-install needed).
+    volumes:
+      - ./linguist-backend/app:/app/app          # Python source (hot-reload watches this)
+      - ./linguist-backend/run.py:/app/run.py    # Dev entry-point
+      - quiz_cache:/app/quiz_cache
+      - ./linguist-backend/app/logs:/app/app/logs
+    # Flask debug server — auto-reloads on every file save, shows full tracebacks.
+    # Single worker avoids fork-related reload issues with gevent.
+    command: python run.py
+    environment:
+      - FLASK_DEBUG=1
+      - FLASK_ENV=development
