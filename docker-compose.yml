@@ -69,7 +69,7 @@ services:
       - OLLAMA_HOST=http://ollama:11434
     entrypoint: >
       /bin/sh -c "
-        ollama pull llama3.1 &&
+        ollama pull llama3.1:8b &&
         ollama pull phi3:mini
       "
 
@@ -88,6 +88,7 @@ services:
     environment:
       - OLLAMA_HOST=http://ollama:11434
       - TTS_HOST=${TTS_HOST:-}
+      - CHAT_LLM_MODEL=llama3.1:8b
       - QUIZ_LLM_MODEL=phi3:mini
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
